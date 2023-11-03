@@ -1,2 +1,2 @@
-# PyTorch_Model_Duplications
-I'll try to duplicate the architecture of a few famous models that have transformed the deep learning industry
+# DeepReplication
+Comprehensive repository featuring replicated versions of various deep learning models.
