@@ -22,7 +22,7 @@ def get_all_sentences(ds, lang):
 
 def get_or_build_tokenizer(config, ds, lang):
     tokenizer_path = Path(config['tokenizer_file'].format(lang))
-    if not Path.exist(tokenizer_path):    
+    if not Path.exists(tokenizer_path):    
         tokenizer = Tokenizer(WordLevel(unk_token='[UNK]'))
         tokenizer.pre_tokenizer = Whitespace()
         trainer = WordLevelTrainer(special_tokens=["[UNK]", "[PAD]", "[SOS]", "[EOS]"], min_frequency = 2)
@@ -48,7 +48,7 @@ def get_ds(config):
     train_ds = BilingualDataset(train_ds_raw, tokenizer_src, tokenizer_target, config["lang_src"], config["lang_target"], config["seq_len"])
     val_ds = BilingualDataset(val_ds_raw, tokenizer_src, tokenizer_target, config["lang_src"], config["lang_target"], config["seq_len"])
 
-    max_len_src, max_len_target = 0
+    max_len_src, max_len_target = 0, 0
 
     for item in ds_raw:
         src_ids = tokenizer_src.encode(item['translation'][config['lang_src']]).ids
@@ -91,8 +91,8 @@ def train_model(config):
         optimizer.load_state_dict(state['optimizer_state_dict'])
         global_step = state['global_step']
     
-    loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer_src.token_to_id('[PAD]'), label_smoothing=0.1).to(device)
-
+    loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer_src.token_to_id('[PAD]')).to(device)
+    
     for epoch in range(initial_epoch, config['num_epochs']):
         model.train()
         batch_iterator = tqdm(train_dataloader, desc=f'Processing epoch {epoch:02d}')

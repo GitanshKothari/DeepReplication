@@ -24,20 +24,20 @@ class PositionalEncoding(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
         # creating a matrix of shape (seq_len, d_model)
-        self.p_encoding = torch.zeros(self.seq_len, self.d_model)
+        p_encoding = torch.zeros(self.seq_len, self.d_model)
         numerator = torch.arange(0, self.seq_len, dtype = torch.float).unsqueeze(1)
         inv_divide_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / self.d_model))
         # Apply sin on all even terms, cos on all odd terms on d_model dimension
-        self.p_encoding[:, 0::2] = torch.sin(numerator * inv_divide_term)
-        self.p_encoding[:, 1::2] = torch.cos(numerator * inv_divide_term)
+        p_encoding[:, 0::2] = torch.sin(numerator * inv_divide_term)
+        p_encoding[:, 1::2] = torch.cos(numerator * inv_divide_term)
 
-        self.p_encoding = self.p_encoding.unsqueeze(0) # Add a new dimension for batch input (seq_len, d_model) -> (batch, seq_len, d_model)
+        p_encoding = p_encoding.unsqueeze(0) # Add a new dimension for batch input (seq_len, d_model) -> (batch, seq_len, d_model)
 
-        self.register_buffer('p_encoding', self.p_encoding)
+        self.register_buffer('pe', p_encoding)
     
     def forward(self, x):
         # Adds positional encoding to the input
-        x = x + (self.p_encoding[:, :x.shape[1], :]).requires_grad(False) # want to go only uptil the length of the current input 
+        x = x + (self.pe[:, :x.shape[1], :]).requires_grad_(False) # want to go only uptil the length of the current input 
         return self.dropout(x)
     
 
@@ -57,6 +57,7 @@ class LayerNormalization(nn.Module):
         
 class FeedForwardBlock(nn.Module):
     def __init__(self, d_model: int, d_ff: int, dropout: float) -> None:
+        super().__init__()
         self.linear1 = nn.Linear(d_model, d_ff) # W1 and b1
         self.dropout = nn.Dropout(p=dropout)
         self.linear2 = nn.Linear(d_ff, d_model) #W2 and b2
@@ -124,7 +125,7 @@ class SkipConnection(nn.Module):
     def __init__(self, dropout: float) -> None:
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
-        self.layer_norm = nn.LayerNorm()
+        self.layer_norm = LayerNormalization()
     
     def forward(self, x, sublayer):
         return x + self.dropout(sublayer(self.layer_norm(x)))
