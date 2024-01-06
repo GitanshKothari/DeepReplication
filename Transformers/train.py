@@ -12,9 +12,71 @@ from tokenizers.pre_tokenizers import Whitespace
 from pathlib import Path
 from tqdm import tqdm
 
-from dataset import BilingualDataset
+from dataset import BilingualDataset, causal_mask
 from model import build_transformer
 from config import get_weights_file_path, get_config
+
+
+def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_target, max_len, device):
+    sos_index = tokenizer_src.token_to_id('[SOS]')
+    eos_index = tokenizer_src.token_to_id('[EOS]')
+
+    encoder_output = model.encode(source, source_mask) #(batch, seq_len, d_model)
+    decoder_input = torch.tensor([[sos_index]], dtype=torch.int64).to(device) #(1, 1)
+    while True:
+        if decoder_input.size(1) >= max_len:
+            break
+        
+        decoder_mask = causal_mask(decoder_input.size(1)).type_as(source).to(device) #(1, 1, seq_len, seq_len)
+        out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask) #(1, seq_len, d_model)
+
+        prob = model.project(out[:, -1]) #(1, target_vocab_size)
+        _, pred = torch.max(prob, dim = -1) #(1, 1)
+        decoder_input = torch.cat([decoder_input, torch.empty(1, 1).type_as(source).fill_(pred.item()).to(device)], dim=1)
+
+        if pred == eos_index:
+            break
+    
+    return decoder_input.squeeze(0)
+
+def run_validation(model, validation_ds, tokenizer_src, tokenizer_target, device, max_len, writer, global_state, print_msg, num_samples = 5):
+    model.eval()
+
+    count = 0
+    source_text = []
+    target_text = []
+    pred_text = []
+
+    console_width = 80
+
+    with torch.no_grad():
+        for batch in tqdm(validation_ds, desc=f'Validating'):
+            count += 1
+            encoder_input = batch['encoder_input'].to(device) #(Batch, seq_len)
+            # decoder_input = batch['decoder_input'].to(device) #(Batch, seq_len)
+            encoder_mask = batch['encoder_mask'].to(device) #(Batch, 1, 1, seq_len)
+            # decoder_mask = batch['decoder_mask'].to(device) #(batch, 1, seq_len, seq_len)
+            assert encoder_input.size(0) == 1, "Batch size must be 1 for validation"
+
+            model_output = greedy_decode(model, encoder_input, encoder_mask, tokenizer_src, tokenizer_target, max_len, device) #(1, seq_len)
+
+            source_text.append(batch['src_text'][0])
+            target_text.append(batch['target_text'][0])
+            pred_text.append(tokenizer_target.decode(model_output.detach().cpu().numpy()))
+
+            print_msg('_'*console_width)
+            print_msg(f'Source: {source_text[-1]}')
+            print_msg(f'Target: {target_text[-1]}')
+            print_msg(f'Pred: {pred_text[-1]}')
+            print_msg('_'*console_width)
+
+            if count >= num_samples:
+                break
+    
+    if writer:
+        pass
+
+
 
 def get_all_sentences(ds, lang):
     for item in ds:
@@ -95,10 +157,10 @@ def train_model(config):
     loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer_src.token_to_id('[PAD]')).to(device)
     
     for epoch in range(initial_epoch, config['num_epochs']):
-        model.train()
         batch_iterator = tqdm(train_dataloader, desc=f'Processing epoch {epoch:02d}')
         
         for batch in batch_iterator:
+            model.train()   
             encoder_input = batch['encoder_input'].to(device) #(Batch, seq_len)
             decoder_input = batch['decoder_input'].to(device) #(Batch, seq_len)
             encoder_mask = batch['encoder_mask'].to(device) #(Batch, 1, 1, seq_len)
@@ -121,7 +183,6 @@ def train_model(config):
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
-
             global_step += 1
         
         model_filename = get_weights_file_path(config, f'{epoch:02d}')
@@ -131,6 +192,8 @@ def train_model(config):
             'optimizer_state_dict': optimizer.state_dict(),
             'global_step': global_step,
         }, model_filename)
+        
+    run_validation(model, val_dataloader, tokenizer_src, tokenizer_target, device, config['seq_len'], writer, global_step, print_msg = print)
 
 if __name__ == '__main__':
 
