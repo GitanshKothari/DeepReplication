@@ -1,6 +1,20 @@
 from pathlib import Path
 
 def get_config():
+    # return{
+    #     "batch_size": 8,
+    #     "num_epochs": 20,
+    #     "lr": 10**-4,
+    #     "seq_len": 350,
+    #     "d_model": 512,
+    #     "lang_src": "en",
+    #     "lang_target": "it",
+    #     "model_folder": "weights",
+    #     "model_basename": "tmodel_",
+    #     "preload": None,
+    #     "tokenizer_file": "tokenizer_{0}.json",
+    #     "experiment_name": "runs/tmodel"
+    # }
     return{
         "batch_size": 8,
         "num_epochs": 20,
@@ -9,7 +23,7 @@ def get_config():
         "d_model": 512,
         "lang_src": "en",
         "lang_target": "it",
-        "model_folder": "weights",
+        "model_folder": "/content/drive/MyDrive/Transformer_Models",
         "model_basename": "tmodel_",
         "preload": None,
         "tokenizer_file": "tokenizer_{0}.json",
